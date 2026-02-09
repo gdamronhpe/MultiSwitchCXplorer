@@ -663,13 +663,17 @@ def launch_ui():
     failed_switches = []
 
     icon_path = resource_path("MultiSwitchCXplorer.ico")
-    if icon_path.exists():
-        root.iconbitmap(default=str(icon_path))
     png_icon_path = resource_path("MultiSwitchCXplorer.png")
-    if png_icon_path.exists():
-        icon_image = tk.PhotoImage(file=str(png_icon_path))
-        root.iconphoto(True, icon_image)
-        root._icon_image_ref = icon_image
+    try:
+        # On Windows, prefer .ico for native title bar/taskbar icon behavior.
+        if sys.platform.startswith("win") and icon_path.exists():
+            root.iconbitmap(default=str(icon_path))
+        elif png_icon_path.exists():
+            icon_image = tk.PhotoImage(file=str(png_icon_path))
+            root.iconphoto(True, icon_image)
+            root._icon_image_ref = icon_image
+    except Exception as e:
+        log_error(f"Unable to set app icon: {e}")
 
     # Header
     header_frame = ttk.Frame(root)
