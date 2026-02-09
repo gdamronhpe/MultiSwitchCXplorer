@@ -104,6 +104,12 @@ def prev_match(raw_text, search_matches, search_current_index_ref):
     search_current_index_ref[0] = (search_current_index_ref[0] - 1) % len(search_matches)
     highlight_current_match(raw_text, search_matches, search_current_index_ref[0])
 
+def _next_row_tag(tree):
+    # Global counter on the tree widget so rows are striped consistently.
+    count = getattr(tree, "_mscx_row_counter", 0)
+    setattr(tree, "_mscx_row_counter", count + 1)
+    return "row_even" if (count % 2 == 0) else "row_odd"
+
 def insert_json_tree(tree, parent, json_data, term=None, open=False, flat_display=False):
     """
     Builds or filters a TreeView depending on the presence of `term`.
@@ -120,7 +126,7 @@ def insert_json_tree(tree, parent, json_data, term=None, open=False, flat_displa
         if isinstance(data, dict):
             data = {k: v for k, v in data.items() if k != '__title__'}
             if not data:
-                tree.insert(parent_id, 'end', text="(empty object)")
+                tree.insert(parent_id, 'end', text="(empty object)", tags=(_next_row_tag(tree),))
                 return
             for k, v in data.items():
                 if term:
@@ -128,22 +134,36 @@ def insert_json_tree(tree, parent, json_data, term=None, open=False, flat_displa
                     match_value = has_match(v)
                     if not (match_key or match_value):
                         continue
-                    node = tree.insert(parent_id, 'end', text=f"{k}", values=(v if not isinstance(v, (dict, list)) else "",), open=open)
+                    node = tree.insert(
+                        parent_id,
+                        'end',
+                        text=f"{k}",
+                        values=(v if not isinstance(v, (dict, list)) else "",),
+                        open=open,
+                        tags=(_next_row_tag(tree),),
+                    )
                     # Always recurse if key matched, even with exact match
                     if isinstance(v, (dict, list)) or match_key:
                         recurse(node, v)
                 else:
-                    node = tree.insert(parent_id, 'end', text=f"{k}", values=(v if not isinstance(v, (dict, list)) else "",), open=open)
+                    node = tree.insert(
+                        parent_id,
+                        'end',
+                        text=f"{k}",
+                        values=(v if not isinstance(v, (dict, list)) else "",),
+                        open=open,
+                        tags=(_next_row_tag(tree),),
+                    )
                     if isinstance(v, (dict, list)):
                         recurse(node, v)
         elif isinstance(data, list):
             if not data:
-                tree.insert(parent_id, 'end', text="(empty list)")
+                tree.insert(parent_id, 'end', text="(empty list)", tags=(_next_row_tag(tree),))
                 return
             for i, item in enumerate(data):
                 if term and not has_match(item):
                     continue
-                node = tree.insert(parent_id, 'end', text=f"Item {i}", open=open)
+                node = tree.insert(parent_id, 'end', text=f"Item {i}", open=open, tags=(_next_row_tag(tree),))
                 recurse(node, item)
 
     if term:
@@ -156,16 +176,17 @@ def insert_json_tree(tree, parent, json_data, term=None, open=False, flat_displa
 
 def apply_filter(term, all_json_results, tree):
     tree.delete(*tree.get_children())
+    setattr(tree, "_mscx_row_counter", 0)
     if not term:
         for result in all_json_results:
             title = result.get("__title__", "Switch Result")
-            top = tree.insert('', 'end', text=title, open=False)
+            top = tree.insert('', 'end', text=title, open=False, tags=(_next_row_tag(tree),))
             insert_json_tree(tree, top, result, open=False)
         return
 
     for result in all_json_results:
         title = result.get("__title__", "Switch Result")
-        top = tree.insert('', 'end', text=title, open=True)
+        top = tree.insert('', 'end', text=title, open=True, tags=(_next_row_tag(tree),))
         insert_json_tree(tree, top, result, term=term, open=True)
 
 def on_tree_right_click(

@@ -2,7 +2,10 @@ import requests
 import urllib3
 from urllib.parse import quote
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from utils import log_info, log_error
+try:
+    from .utils import log_info, log_error
+except ImportError:
+    from utils import log_info, log_error
 import threading
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)

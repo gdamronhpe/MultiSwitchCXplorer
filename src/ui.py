@@ -8,22 +8,34 @@ import os
 import sys
 import getpass
 from typing import Iterable
-from api import run_api_calls
-from utils import (
-    bind_search_keys, search_raw_view, next_match, prev_match,
-    insert_json_tree, apply_filter, on_tree_right_click, on_raw_right_click,
-    make_run_button, export_tree_to_csv_from_tree,
-    show_help_guide, log_info, log_error, configure_logger, export_results_to_csv
-)
+try:
+    from .api import run_api_calls
+    from .utils import (
+        bind_search_keys, search_raw_view, next_match, prev_match,
+        insert_json_tree, apply_filter, on_tree_right_click, on_raw_right_click,
+        make_run_button, export_tree_to_csv_from_tree,
+        show_help_guide, log_info, log_error, configure_logger, export_results_to_csv
+    )
+except ImportError:
+    from api import run_api_calls
+    from utils import (
+        bind_search_keys, search_raw_view, next_match, prev_match,
+        insert_json_tree, apply_filter, on_tree_right_click, on_raw_right_click,
+        make_run_button, export_tree_to_csv_from_tree,
+        show_help_guide, log_info, log_error, configure_logger, export_results_to_csv
+    )
 import threading # Import threading
 
 def resource_path(relative_name: str) -> Path:
-    # In a PyInstaller onefile build, data gets unpacked into sys._MEIPASS
+    # In a PyInstaller onefile build, bundled data may be rooted at _MEIPASS
+    # or under an "assets" subfolder, depending on --add-data targets.
     if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-        base = Path(sys._MEIPASS)  # type: ignore[attr-defined]
-    else:
-        base = Path(__file__).resolve().parent.parent / "assets"
-    return base / relative_name
+        meipass = Path(sys._MEIPASS)  # type: ignore[attr-defined]
+        direct = meipass / relative_name
+        if direct.exists():
+            return direct
+        return meipass / "assets" / relative_name
+    return Path(__file__).resolve().parent.parent / "assets" / relative_name
 
 def app_root_path() -> Path:
     if getattr(sys, 'frozen', False):
@@ -650,11 +662,14 @@ def launch_ui():
     stat_total_var = tk.StringVar(value="0")
     failed_switches = []
 
-    # --- Start of icon handling modification ---
     icon_path = resource_path("MultiSwitchCXplorer.ico")
     if icon_path.exists():
-        root.iconbitmap(default=icon_path)
-    # --- End of icon handling modification ---
+        root.iconbitmap(default=str(icon_path))
+    png_icon_path = resource_path("MultiSwitchCXplorer.png")
+    if png_icon_path.exists():
+        icon_image = tk.PhotoImage(file=str(png_icon_path))
+        root.iconphoto(True, icon_image)
+        root._icon_image_ref = icon_image
 
     # Header
     header_frame = ttk.Frame(root)
@@ -1292,6 +1307,7 @@ def launch_ui():
 
             all_json_results.clear()
             tree.delete(*tree.get_children())
+            setattr(tree, "_mscx_row_counter", 0)
             raw_text.delete("1.0", tk.END)
             log_text.delete("1.0", tk.END)
 
@@ -1312,12 +1328,15 @@ def launch_ui():
             # When appending (retry), we want: successes decrease Fail and increase Success.
             # When fresh run, we just count normally.
             is_failure = isinstance(data, dict) and "error" in data
+            row_idx = getattr(tree, "_mscx_row_counter", 0)
+            row_tag = "row_even" if (row_idx % 2 == 0) else "row_odd"
+            setattr(tree, "_mscx_row_counter", row_idx + 1)
 
             if is_failure:
                 # Count failure
                 stat_fail_var.set(str(int(stat_fail_var.get()) + 1 if not append else int(stat_fail_var.get())))
                 # In append mode, a failure remains a failure; keep it in the new failed list we'll rebuild below
-                top = tree.insert("", "end", text=title, values=(data.get('error', 'Unknown error'),))
+                top = tree.insert("", "end", text=title, values=(data.get('error', 'Unknown error'),), tags=(row_tag,))
             else:
                 # Count success
                 if append:
@@ -1337,7 +1356,7 @@ def launch_ui():
                     except Exception:
                         stat_success_var.set("1")
 
-                top = tree.insert("", "end", text=title, open=False)
+                top = tree.insert("", "end", text=title, open=False, tags=(row_tag,))
                 insert_json_tree(tree, top, data)
 
             # Raw pane (truncate very large payloads to avoid UI freezes)
@@ -1552,6 +1571,10 @@ def launch_ui():
     tree.heading("#0", text="Key")
     tree.heading("value", text="Value")
     tree.column("value", width=300)
+    tree.configure(style="Results.Treeview")
+    style.configure("Results.Treeview", rowheight=24)
+    tree.tag_configure("row_even", background="#23272d")
+    tree.tag_configure("row_odd", background="#2b3037")
 
     tree.pack(fill=tk.BOTH, expand=True)
     tree_scrollbar.config(command=tree.yview)
