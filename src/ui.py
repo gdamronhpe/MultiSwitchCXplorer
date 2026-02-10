@@ -12,7 +12,7 @@ try:
     from .api import run_api_calls
     from .utils import (
         bind_search_keys, search_raw_view, next_match, prev_match,
-        insert_json_tree, apply_filter, on_tree_right_click, on_raw_right_click,
+        insert_json_tree, apply_filters, on_tree_right_click, on_raw_right_click,
         make_run_button, export_tree_to_csv_from_tree,
         show_help_guide, log_info, log_error, configure_logger, export_results_to_csv
     )
@@ -20,7 +20,7 @@ except ImportError:
     from api import run_api_calls
     from utils import (
         bind_search_keys, search_raw_view, next_match, prev_match,
-        insert_json_tree, apply_filter, on_tree_right_click, on_raw_right_click,
+        insert_json_tree, apply_filters, on_tree_right_click, on_raw_right_click,
         make_run_button, export_tree_to_csv_from_tree,
         show_help_guide, log_info, log_error, configure_logger, export_results_to_csv
     )
@@ -244,7 +244,7 @@ search_matches = []
 search_current_index = [0]
 api_endpoints = load_get_endpoints()
 endpoint_meta = load_endpoint_meta()
-APP_VERSION = "2026.02.06" # Define app version
+APP_VERSION = "2026.02.10" # Define app version
 RAW_MAX_CHARS = 200000 # Truncate raw JSON to keep UI responsive
 run_button_ref = None # Global reference for the run/stop button
 RUN_BUTTON_WIDTH = 22
@@ -508,20 +508,20 @@ def open_cli_builder_popup(root,
                     command=refresh).grid(row=0, column=1, sticky="w", padx=8, pady=6)
 
     ttk.Label(opt_frame, text="Device file:").grid(row=1, column=0, sticky="e", padx=(8, 4), pady=6)
-    device_entry = ttk.Entry(opt_frame, textvariable=devicefile_var, width=50)
+    device_entry = ttk.Entry(opt_frame, textvariable=devicefile_var, width=50, style="Soft.TEntry")
     device_entry.grid(row=1, column=1, sticky="we", padx=(0, 4), pady=6)
 
     # Buttons on the right of the device file row
     btns_dev = ttk.Frame(opt_frame)
     btns_dev.grid(row=1, column=2, sticky="w", padx=4, pady=6)
-    ttk.Button(btns_dev, text="Browse...", command=choose_device_file).pack(side="left")
-    ttk.Button(btns_dev, text="Save switches...", command=save_current_switches).pack(side="left", padx=(6, 0))
+    ttk.Button(btns_dev, text="Browse...", style="SoftAction.TButton", command=choose_device_file).pack(side="left")
+    ttk.Button(btns_dev, text="Save switches...", style="SoftAction.TButton", command=save_current_switches).pack(side="left", padx=(6, 0))
 
 
     ttk.Label(opt_frame, text="Output CSV:").grid(row=2, column=0, sticky="e", padx=(8, 4), pady=6)
-    output_entry = ttk.Entry(opt_frame, textvariable=output_var, width=50)
+    output_entry = ttk.Entry(opt_frame, textvariable=output_var, width=50, style="Soft.TEntry")
     output_entry.grid(row=2, column=1, sticky="we", padx=(0, 4), pady=6)
-    output_btn = ttk.Button(opt_frame, text="Browse...", command=choose_output_file)
+    output_btn = ttk.Button(opt_frame, text="Browse...", style="SoftAction.TButton", command=choose_output_file)
     output_btn.grid(row=2, column=2, sticky="w", padx=4, pady=6)
 
     hint_lbl = tk.Label(opt_frame, textvariable=headless_hint, anchor="w", fg="gray")
@@ -540,9 +540,9 @@ def open_cli_builder_popup(root,
     # Row 2: actions
     btn_frame = ttk.Frame(frm)
     btn_frame.pack(fill="x", pady=(10, 0))
-    ttk.Button(btn_frame, text="Copy", command=copy_to_clipboard).pack(side="left")
-    ttk.Button(btn_frame, text="Save .bat...", command=save_bat).pack(side="left", padx=6)
-    ttk.Button(btn_frame, text="Close", command=win.destroy).pack(side="right")
+    ttk.Button(btn_frame, text="Copy", style="SoftAction.TButton", command=copy_to_clipboard).pack(side="left")
+    ttk.Button(btn_frame, text="Save .bat...", style="SoftAction.TButton", command=save_bat).pack(side="left", padx=6)
+    ttk.Button(btn_frame, text="Close", style="SoftAction.TButton", command=win.destroy).pack(side="right")
 
     # Initialize preview visibility
     refresh()
@@ -655,6 +655,11 @@ def launch_ui():
     style.configure("PrimaryAction.TButton", foreground="white", background="#F58220", font=("Segoe UI", 12, "bold"), padding=(16, 10))
     style.configure("RunDanger.TButton", foreground="white", background="#C62828", font=("Segoe UI", 12, "bold"), padding=(16, 10))
     style.configure("SecondaryAction.TButton", font=("Segoe UI", 9), padding=(6, 4))
+    # Softer control styles for a less boxy look.
+    style.configure("Soft.TCombobox", padding=6, arrowsize=13)
+    style.configure("Soft.TEntry", padding=6)
+    style.configure("SoftAction.TButton", font=("Segoe UI", 9), padding=(10, 6))
+    style.configure("TinyAction.TButton", font=("Segoe UI", 7), padding=(2, 1))
     root.title("MultiSwitchCXplorer - Aruba CX multi-switch tool")
 
     stat_success_var = tk.StringVar(value="0")
@@ -686,7 +691,7 @@ def launch_ui():
     ttk.Label(title_frame, text="plorer", font=("Segoe UI", 14, "bold")).pack(side=tk.LEFT)
 
     # Help button top-right of the entire window
-    help_btn = tk.Button(header_frame, text="Help", command=lambda: show_help_guide(APP_VERSION), font=("Arial", 8, "bold"), relief="flat", bg="lightgray")
+    help_btn = ttk.Button(header_frame, text="Help", style="SoftAction.TButton", command=lambda: show_help_guide(APP_VERSION))
     help_btn.pack(side=tk.RIGHT)
 
     main_frame = tk.Frame(root)
@@ -735,7 +740,7 @@ def launch_ui():
     # Toolbar under the text box
     switches_toolbar = tk.Frame(switches_frame)
     switches_toolbar.pack(fill=tk.X, padx=10, pady=(0, 5))
-    ttk.Button(switches_toolbar, text="Open device file...", command=open_device_file).pack(side=tk.LEFT)
+    ttk.Button(switches_toolbar, text="Open device file...", style="SoftAction.TButton", command=open_device_file).pack(side=tk.LEFT)
 
     # Ensure the Target Switches input gets focus after UI initialization
     root.after(150, lambda: switches_entry.focus_force())
@@ -750,8 +755,8 @@ def launch_ui():
     # Credentials
     credentials_frame = ttk.LabelFrame(connect_group, text="Credentials")
     credentials_frame.pack(fill=tk.X, padx=10, pady=5)
-    username_entry = ttk.Entry(credentials_frame)
-    password_entry = ttk.Entry(credentials_frame, show="*")
+    username_entry = ttk.Entry(credentials_frame, style="Soft.TEntry")
+    password_entry = ttk.Entry(credentials_frame, show="*", style="Soft.TEntry")
     tk.Label(credentials_frame, text="Username:").grid(row=0, column=0, padx=5, pady=5, sticky='w') # Changed sticky
     username_entry.grid(row=0, column=1, padx=5, pady=5, sticky='ew') # Changed sticky
     tk.Label(credentials_frame, text="Password:").grid(row=0, column=2, padx=5, pady=5, sticky='w') # Changed sticky
@@ -989,7 +994,7 @@ def launch_ui():
     api_frame = ttk.LabelFrame(custom_frame, text="API Options")
     api_frame.pack(fill=tk.X, padx=10, pady=5)
     # --- widgets ---
-    endpoint_combobox = ttk.Combobox(api_frame, values=api_endpoints, state="normal")
+    endpoint_combobox = ttk.Combobox(api_frame, values=api_endpoints, state="normal", style="Soft.TCombobox")
     endpoint_combobox.current(0)
     endpoint_overlay = attach_search_dropdown(endpoint_combobox, api_endpoints, height=8)
     if "/system" in api_endpoints:
@@ -1000,7 +1005,8 @@ def launch_ui():
     version_entry = ttk.Combobox(
         api_frame, textvariable=version_value,
         values=["10.04","10.08","10.09","10.11","10.12","10.13","10.14","10.15"],
-        width=6
+        width=6,
+        style="Soft.TCombobox"
     )
     version_entry.current(0)
     depth_entry = ttk.Spinbox(api_frame, from_=1, to=10, width=4)
@@ -1008,9 +1014,10 @@ def launch_ui():
     selector_combobox = ttk.Combobox(
         api_frame, textvariable=selector_value,
         values=["configuration","status","statistics"],
-        state="readonly"
+        state="readonly",
+        style="Soft.TCombobox"
     )
-    attributes_entry = ttk.Entry(api_frame)
+    attributes_entry = ttk.Entry(api_frame, style="Soft.TEntry")
     attributes_autofilled = [False]
     # --- grid (Endpoint full row; small controls on next row) ---
     # Give Endpoint (col 1) and Selector (col 5) and Attributes (col 1) room to stretch
@@ -1219,7 +1226,7 @@ def launch_ui():
     # Delete button (explicit action)
     saved_actions = ttk.Frame(saved_requests_frame)
     saved_actions.pack(fill=tk.X, padx=10, pady=(0, 6))
-    ttk.Button(saved_actions, text="Delete Saved Request", style="SecondaryAction.TButton",
+    ttk.Button(saved_actions, text="Delete Saved Request", style="SoftAction.TButton",
                command=lambda: delete_saved_request_by_index(
                    saved_listbox.curselection()[0] if saved_listbox.curselection() else -1
                )).pack(side=tk.LEFT)
@@ -1248,12 +1255,12 @@ def launch_ui():
     # Save current custom request
     custom_actions = ttk.Frame(custom_frame)
     custom_actions.pack(fill=tk.X, padx=10, pady=(0, 6))
-    ttk.Button(custom_actions, text="Save Current Request", command=save_current_request).pack(side=tk.LEFT)
+    ttk.Button(custom_actions, text="Save Current Request", style="SoftAction.TButton", command=save_current_request).pack(side=tk.LEFT)
 
     # Recent Requests
     recent_frame = ttk.LabelFrame(custom_frame, text="Recent Requests")
     recent_frame.pack(fill=tk.X, padx=10, pady=5)
-    recent_combo = ttk.Combobox(recent_frame, state="readonly")
+    recent_combo = ttk.Combobox(recent_frame, state="readonly", style="Soft.TCombobox")
     recent_combo.pack(fill=tk.X, padx=10, pady=5)
     def on_recent_selected(event):
         index = recent_combo.current()
@@ -1268,7 +1275,7 @@ def launch_ui():
     recent_combo.bind("<<ComboboxSelected>>", on_recent_selected)
 
     # Generate CLI button
-    ttk.Button(controls_frame, text="Generate CLI...", style="SecondaryAction.TButton", command=lambda: open_cli_builder_popup(
+    ttk.Button(controls_frame, text="Generate CLI...", style="SoftAction.TButton", command=lambda: open_cli_builder_popup(
         root,
         username_entry, password_entry, switches_entry,
         endpoint_combobox, version_value, depth_entry,
@@ -1314,6 +1321,7 @@ def launch_ui():
             setattr(tree, "_mscx_row_counter", 0)
             raw_text.delete("1.0", tk.END)
             log_text.delete("1.0", tk.END)
+            filter_status_var.set("Showing switches: 0/0")
 
         def on_result(switch, data, hostname):
             # This function is called from the worker thread, so GUI updates must use root.after()
@@ -1321,6 +1329,7 @@ def launch_ui():
 
         def _update_gui_with_result(switch, data, hostname):
             title = f"{hostname}: {switch} - {endpoint_combobox.get()}"
+            active_filter = has_active_filters()
 
             # Normalize non-dict results to avoid crashing on list responses
             if isinstance(data, dict):
@@ -1340,7 +1349,8 @@ def launch_ui():
                 # Count failure
                 stat_fail_var.set(str(int(stat_fail_var.get()) + 1 if not append else int(stat_fail_var.get())))
                 # In append mode, a failure remains a failure; keep it in the new failed list we'll rebuild below
-                top = tree.insert("", "end", text=title, values=(data.get('error', 'Unknown error'),), tags=(row_tag,))
+                if not active_filter:
+                    tree.insert("", "end", text=title, values=(data.get('error', 'Unknown error'),), tags=(row_tag,))
             else:
                 # Count success
                 if append:
@@ -1360,8 +1370,9 @@ def launch_ui():
                     except Exception:
                         stat_success_var.set("1")
 
-                top = tree.insert("", "end", text=title, open=False, tags=(row_tag,))
-                insert_json_tree(tree, top, data)
+                if not active_filter:
+                    top = tree.insert("", "end", text=title, open=False, tags=(row_tag,))
+                    insert_json_tree(tree, top, data)
 
             # Raw pane (truncate very large payloads to avoid UI freezes)
             raw_payload = json.dumps(data, indent=2)
@@ -1372,6 +1383,12 @@ def launch_ui():
                 )
             raw_text.insert(tk.END, f"{title}\n{raw_payload}\n\n")
             raw_text.see(tk.END)
+
+            if active_filter:
+                refresh_filter()
+            else:
+                total_results = len(all_json_results)
+                filter_status_var.set(f"Showing switches: {total_results}/{total_results}")
 
             # Track failures for future retries: rebuild failed_switches incrementally
             # In fresh run -> we're building the first failure list
@@ -1484,12 +1501,17 @@ def launch_ui():
 
         root.after(100, _finish_ui)
 
+    # Keep Run API button with the main request controls, but pin Run Summary to bottom.
+    run_button_frame = tk.Frame(controls_frame)
+    run_button_frame.pack(fill=tk.X, padx=0, pady=(0, 6))
+    run_summary_anchor = tk.Frame(controls_frame)
+    run_summary_anchor.pack(side=tk.BOTTOM, fill=tk.X, padx=0, pady=(0, 6))
 
-    run_button_ref = make_run_button(controls_frame, toggle_run_stop) # Assign to global reference
+    run_button_ref = make_run_button(run_button_frame, toggle_run_stop) # Assign to global reference
     run_button_ref.pack(fill=tk.X, padx=10, pady=6)
 
     # Stats and Retry
-    stats_frame = ttk.LabelFrame(controls_frame, text="Run Summary")
+    stats_frame = ttk.LabelFrame(run_summary_anchor, text="Run Summary")
     stats_frame.pack(fill=tk.X, padx=10, pady=(0, 5))
 
     ttk.Label(stats_frame, text="Success:").grid(row=0, column=0, padx=(8,2), pady=5, sticky="w")
@@ -1500,6 +1522,9 @@ def launch_ui():
 
     ttk.Label(stats_frame, text="Total:").grid(row=0, column=4, padx=(8,2), pady=5, sticky="w")
     ttk.Label(stats_frame, textvariable=stat_total_var).grid(row=0, column=5, padx=(0,8), pady=5, sticky="w")
+
+    for col in range(6):
+        stats_frame.columnconfigure(col, weight=1)
 
     def _remove_prior_results_for_switch(switch_ip, endpoint_text=None):
         """Remove prior rows for a given switch (and optional endpoint) from the tree
@@ -1538,7 +1563,7 @@ def launch_ui():
         # Now append fresh results inline (no clearing)
         start_api_calls(append=True, switches_override=targets)
 
-    retry_btn = ttk.Button(stats_frame, text="Retry Failed", command=retry_failed, state="disabled")
+    retry_btn = ttk.Button(stats_frame, text="Retry Failed", style="SoftAction.TButton", command=retry_failed, state="disabled")
     retry_btn.grid(row=1, column=0, columnspan=6, padx=8, pady=(0, 8), sticky="ew")
 
     # Help button now in header (top-right)
@@ -1559,13 +1584,183 @@ def launch_ui():
     # Tree View Tab
     filter_frame = tk.Frame(tree_tab)
     filter_frame.pack(fill=tk.X, padx=5, pady=2)
-    tk.Button(filter_frame, text="Apply", command=lambda: apply_filter(filter_entry.get(), all_json_results, tree)).pack(side=tk.LEFT, padx=5)
-    tk.Button(filter_frame, text="Clear", command=lambda: [filter_entry.delete(0, tk.END), apply_filter("", all_json_results, tree)]).pack(side=tk.LEFT, padx=5)
-    tk.Label(filter_frame, text="Filter JSON:").pack(side=tk.LEFT)
-    filter_entry = tk.Entry(filter_frame)
-    filter_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
-    ttk.Button(filter_frame, text="Export Filtered to CSV", command=lambda: export_tree_to_csv_from_tree(tree)).pack(pady=5)
+    tk.Label(filter_frame, text="Filters:").pack(side=tk.LEFT, padx=(0, 6))
+    FILTER_FIELD_WIDTH = 9
+    FILTER_OP_WIDTH = 12
+    FILTER_INPUT_WIDTH = 24
+    filter_rows_frame = tk.Frame(filter_frame)
+    filter_rows_frame.pack(side=tk.LEFT, fill=tk.NONE, expand=False)
+    ttk.Button(filter_frame, text="Clear Filters", style="SoftAction.TButton", command=lambda: clear_all_filters()).pack(side=tk.LEFT, padx=(6, 6))
+    filter_right_frame = tk.Frame(filter_frame)
+    filter_right_frame.pack(side=tk.RIGHT, anchor="e")
+    filter_mode_var = tk.StringVar(value="ALL")
+    filter_mode_frame = tk.Frame(tree_tab)
+    tree_frame_ref = [None]
+    tk.Radiobutton(
+        filter_mode_frame,
+        text="Select ALL matches",
+        variable=filter_mode_var,
+        value="ALL",
+        command=lambda: refresh_filter()
+    ).pack(side=tk.LEFT, padx=(5, 10))
+    tk.Radiobutton(
+        filter_mode_frame,
+        text="Select ANY match",
+        variable=filter_mode_var,
+        value="ANY",
+        command=lambda: refresh_filter()
+    ).pack(side=tk.LEFT)
+    filter_status_var = tk.StringVar(value="Showing switches: 0/0")
+    filter_rows = []
+    _filter_after_id = [None]
+
+    def get_active_filters():
+        rows = []
+        for row in filter_rows:
+            term = row["entry"].get().strip()
+            if not term:
+                continue
+            rows.append({
+                "field": row["field_var"].get(),
+                "operator": row["op_var"].get(),
+                "term": term,
+            })
+        return rows
+
+    def has_active_filters():
+        return bool(get_active_filters())
+
+    def refresh_filter():
+        shown, total = apply_filters(
+            get_active_filters(),
+            all_json_results,
+            tree,
+            match_mode=filter_mode_var.get()
+        )
+        if has_active_filters():
+            filter_status_var.set(f"Matched switches: {shown}/{total}")
+        else:
+            filter_status_var.set(f"Showing switches: {shown}/{total}")
+
+    def schedule_filter_refresh(event=None):
+        if _filter_after_id[0] is not None:
+            root.after_cancel(_filter_after_id[0])
+        _filter_after_id[0] = root.after(175, refresh_filter)
+        return None
+
+    def update_filter_mode_visibility():
+        tree_frame = tree_frame_ref[0]
+        if tree_frame is None:
+            return
+        if len(filter_rows) > 1:
+            if not filter_mode_frame.winfo_ismapped():
+                filter_mode_frame.pack(fill=tk.X, padx=5, pady=(0, 2), before=tree_frame)
+        else:
+            filter_mode_var.set("ALL")
+            if filter_mode_frame.winfo_ismapped():
+                filter_mode_frame.pack_forget()
+
+    def remove_filter_row(row_obj):
+        global filter_entry
+        if len(filter_rows) == 1:
+            row_obj["field_var"].set("Value")
+            row_obj["op_var"].set("contains")
+            row_obj["entry"].delete(0, tk.END)
+            refresh_filter()
+            return
+
+        row_obj["frame"].destroy()
+        filter_rows.remove(row_obj)
+        filter_entry = filter_rows[0]["entry"]
+        update_filter_mode_visibility()
+        refresh_filter()
+
+    def add_filter_row(field="Value", operator="contains", term=""):
+        global filter_entry
+        row_frame = tk.Frame(filter_rows_frame)
+        row_frame.pack(fill=tk.X, pady=1)
+
+        field_var = tk.StringVar(value=field)
+        field_combo = ttk.Combobox(
+            row_frame,
+            textvariable=field_var,
+            values=["Value", "Key"],
+            state="readonly",
+            width=FILTER_FIELD_WIDTH,
+            style="Soft.TCombobox"
+        )
+        field_combo.pack(side=tk.LEFT, padx=(0, 2))
+
+        op_var = tk.StringVar(value=operator)
+        op_combo = ttk.Combobox(
+            row_frame,
+            textvariable=op_var,
+            values=["contains", "equals", "not contains", "not equals"],
+            state="readonly",
+            width=FILTER_OP_WIDTH,
+            style="Soft.TCombobox"
+        )
+        op_combo.pack(side=tk.LEFT, padx=2)
+
+        entry = tk.Entry(row_frame, width=FILTER_INPUT_WIDTH)
+        entry.pack(side=tk.LEFT, padx=4)
+        if term:
+            entry.insert(0, term)
+
+        row_obj = {
+            "frame": row_frame,
+            "field_var": field_var,
+            "op_var": op_var,
+            "entry": entry,
+        }
+
+        ttk.Button(
+            row_frame,
+            text="+",
+            style="TinyAction.TButton",
+            width=1,
+            command=lambda: add_filter_row()
+        ).pack(side=tk.LEFT, padx=(2, 1))
+        ttk.Button(
+            row_frame,
+            text="-",
+            style="TinyAction.TButton",
+            width=1,
+            command=lambda r=row_obj: remove_filter_row(r)
+        ).pack(side=tk.LEFT)
+
+        field_combo.bind("<<ComboboxSelected>>", lambda e: refresh_filter())
+        op_combo.bind("<<ComboboxSelected>>", lambda e: refresh_filter())
+        entry.bind("<KeyRelease>", schedule_filter_refresh)
+        entry.bind("<Return>", lambda e: (refresh_filter(), "break"))
+
+        filter_rows.append(row_obj)
+        if len(filter_rows) == 1:
+            filter_entry = entry
+        update_filter_mode_visibility()
+        return row_obj
+
+    def clear_all_filters():
+        global filter_entry
+        while len(filter_rows) > 1:
+            row = filter_rows.pop()
+            row["frame"].destroy()
+        if filter_rows:
+            row = filter_rows[0]
+            row["field_var"].set("Value")
+            row["op_var"].set("contains")
+            row["entry"].delete(0, tk.END)
+            filter_entry = row["entry"]
+        update_filter_mode_visibility()
+        refresh_filter()
+
+    add_filter_row()
+
+    ttk.Button(filter_right_frame, text="Export Filtered to CSV", style="SoftAction.TButton", command=lambda: export_tree_to_csv_from_tree(tree)).pack(side=tk.RIGHT, padx=(8, 0))
+    tk.Label(filter_right_frame, textvariable=filter_status_var).pack(side=tk.RIGHT, padx=(0, 8))
     tree_frame = ttk.Frame(tree_tab)
+    tree_frame_ref[0] = tree_frame
+    update_filter_mode_visibility()
     tree_frame.pack(fill=tk.BOTH, expand=True)
 
     tree_scrollbar = ttk.Scrollbar(tree_frame)
@@ -1588,8 +1783,18 @@ def launch_ui():
     search_frame = tk.Frame(raw_tab)
     search_frame.pack(fill=tk.X, padx=5, pady=5)
 
-    tk.Button(search_frame, text="Previous", command=lambda: prev_match(raw_text, search_matches, search_current_index)).pack(side=tk.LEFT)
-    tk.Button(search_frame, text="Next", command=lambda: next_match(raw_text, search_matches, search_current_index)).pack(side=tk.LEFT)
+    ttk.Button(
+        search_frame,
+        text="Previous",
+        style="SoftAction.TButton",
+        command=lambda: prev_match(raw_text, search_matches, search_current_index, raw_match_label)
+    ).pack(side=tk.LEFT)
+    ttk.Button(
+        search_frame,
+        text="Next",
+        style="SoftAction.TButton",
+        command=lambda: next_match(raw_text, search_matches, search_current_index, raw_match_label)
+    ).pack(side=tk.LEFT)
     tk.Label(search_frame, text="Search:").pack(side=tk.LEFT, padx=(10, 0))
     raw_search_entry = tk.Entry(search_frame)
     raw_search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)

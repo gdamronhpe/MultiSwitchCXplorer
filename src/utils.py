@@ -3,6 +3,9 @@ import tkinter as tk
 import ttkbootstrap as ttk
 from tkinter import Menu, filedialog, messagebox
 import csv
+import os
+import sys
+import subprocess
 
 
 # Global reference for the log text widget
@@ -50,6 +53,7 @@ def search_raw_view(term, raw_text, raw_match_label, search_matches_ref, search_
     search_current_index_ref[0] = 0
     raw_text.tag_remove("search_match", "1.0", tk.END)
     raw_text.tag_remove("current_match", "1.0", tk.END)
+    term = (term or "").strip()
 
     if not term:
         raw_match_label.config(text="Matches: 0")
@@ -80,7 +84,7 @@ def search_raw_view(term, raw_text, raw_match_label, search_matches_ref, search_
 
     if search_matches_ref:
         highlight_current_match(raw_text, search_matches_ref, search_current_index_ref[0])
-        raw_match_label.config(text=f"Matches: {len(search_matches_ref)}")
+        raw_match_label.config(text=f"Matches: {len(search_matches_ref)} (1/{len(search_matches_ref)})")
     else:
         raw_match_label.config(text="Matches: 0")
 
@@ -92,17 +96,25 @@ def highlight_current_match(raw_text, search_matches, index):
     raw_text.tag_add("current_match", start_index, end_index)
     raw_text.see(start_index)
 
-def next_match(raw_text, search_matches, search_current_index_ref):
+def next_match(raw_text, search_matches, search_current_index_ref, raw_match_label=None):
     if not search_matches:
         return
     search_current_index_ref[0] = (search_current_index_ref[0] + 1) % len(search_matches)
     highlight_current_match(raw_text, search_matches, search_current_index_ref[0])
+    if raw_match_label:
+        raw_match_label.config(
+            text=f"Matches: {len(search_matches)} ({search_current_index_ref[0] + 1}/{len(search_matches)})"
+        )
 
-def prev_match(raw_text, search_matches, search_current_index_ref):
+def prev_match(raw_text, search_matches, search_current_index_ref, raw_match_label=None):
     if not search_matches:
         return
     search_current_index_ref[0] = (search_current_index_ref[0] - 1) % len(search_matches)
     highlight_current_match(raw_text, search_matches, search_current_index_ref[0])
+    if raw_match_label:
+        raw_match_label.config(
+            text=f"Matches: {len(search_matches)} ({search_current_index_ref[0] + 1}/{len(search_matches)})"
+        )
 
 def _next_row_tag(tree):
     # Global counter on the tree widget so rows are striped consistently.
@@ -110,17 +122,29 @@ def _next_row_tag(tree):
     setattr(tree, "_mscx_row_counter", count + 1)
     return "row_even" if (count % 2 == 0) else "row_odd"
 
-def insert_json_tree(tree, parent, json_data, term=None, open=False, flat_display=False):
+def insert_json_tree(tree, parent, json_data, term=None, open=False, flat_display=False, match_scope="any"):
     """
     Builds or filters a TreeView depending on the presence of `term`.
     """
+    scope = str(match_scope or "any").strip().lower()
+
+    def _string_match(text):
+        lowered = str(text).lower()
+        return (term == lowered) if is_exact else (term in lowered)
+
     def has_match(data):
         if isinstance(data, dict):
-            return any((term == str(k).lower() if is_exact else term in str(k).lower()) or has_match(v) for k, v in data.items())
+            for k, v in data.items():
+                key_hit = _string_match(k) if scope in ("any", "key") else False
+                if key_hit or has_match(v):
+                    return True
+            return False
         elif isinstance(data, list):
             return any(has_match(i) for i in data)
         else:
-            return term == str(data).lower() if is_exact else term in str(data).lower()
+            if scope == "key":
+                return False
+            return _string_match(data)
 
     def recurse(parent_id, data):
         if isinstance(data, dict):
@@ -130,9 +154,9 @@ def insert_json_tree(tree, parent, json_data, term=None, open=False, flat_displa
                 return
             for k, v in data.items():
                 if term:
-                    match_key = term == str(k).lower() if is_exact else term in str(k).lower()
-                    match_value = has_match(v)
-                    if not (match_key or match_value):
+                    match_key = _string_match(k) if scope in ("any", "key") else False
+                    match_child = has_match(v)
+                    if not (match_key or match_child):
                         continue
                     node = tree.insert(
                         parent_id,
@@ -174,20 +198,100 @@ def insert_json_tree(tree, parent, json_data, term=None, open=False, flat_displa
 
     recurse(parent, json_data)
 
-def apply_filter(term, all_json_results, tree):
+def _match_text(candidate, term, operator):
+    c = "" if candidate is None else str(candidate).lower()
+    t = "" if term is None else str(term).lower()
+    if operator == "equals":
+        return c == t
+    if operator == "not equals":
+        return c != t
+    if operator == "not contains":
+        return t not in c
+    return t in c
+
+def _leaf_matches_clauses(key_text, value_text, clauses, match_mode):
+    hits = []
+    for clause in clauses:
+        field_key = str(clause.get("field", "Value")).strip().lower()
+        if field_key not in ("key", "value"):
+            field_key = "value"
+        operator = str(clause.get("operator", "contains")).strip().lower()
+        term = str(clause.get("term", "")).strip()
+        candidate = key_text if field_key == "key" else value_text
+        hits.append(_match_text(candidate, term, operator))
+    if not hits:
+        return True
+    return any(hits) if str(match_mode or "ALL").upper() == "ANY" else all(hits)
+
+_NO_MATCH = object()
+
+def _filter_json_for_display(data, clauses, match_mode, current_key=""):
+    if isinstance(data, dict):
+        out = {}
+        for k, v in data.items():
+            if k == "__title__":
+                continue
+            child = _filter_json_for_display(v, clauses, match_mode, current_key=str(k))
+            if child is not _NO_MATCH:
+                out[k] = child
+        return out if out else _NO_MATCH
+
+    if isinstance(data, list):
+        out = []
+        for item in data:
+            child = _filter_json_for_display(item, clauses, match_mode, current_key=current_key)
+            if child is not _NO_MATCH:
+                out.append(child)
+        return out if out else _NO_MATCH
+
+    if _leaf_matches_clauses(current_key, data, clauses, match_mode):
+        return data
+    return _NO_MATCH
+
+def apply_filters(filters, all_json_results, tree, match_mode="ALL"):
     tree.delete(*tree.get_children())
     setattr(tree, "_mscx_row_counter", 0)
-    if not term:
+    total = len(all_json_results)
+    active_filters = [f for f in (filters or []) if str((f or {}).get("term", "")).strip()]
+
+    if not active_filters:
         for result in all_json_results:
             title = result.get("__title__", "Switch Result")
             top = tree.insert('', 'end', text=title, open=False, tags=(_next_row_tag(tree),))
             insert_json_tree(tree, top, result, open=False)
-        return
+        return total, total
 
+    mode = str(match_mode or "ALL").strip().upper()
+
+    shown = 0
     for result in all_json_results:
         title = result.get("__title__", "Switch Result")
+        body = {k: v for k, v in result.items() if k != "__title__"} if isinstance(result, dict) else result
+        filtered_body = _filter_json_for_display(body, active_filters, mode, current_key="")
+        if filtered_body is _NO_MATCH:
+            continue
+
+        shown += 1
         top = tree.insert('', 'end', text=title, open=True, tags=(_next_row_tag(tree),))
-        insert_json_tree(tree, top, result, term=term, open=True)
+        if isinstance(result, dict):
+            display_result = {"__title__": title}
+            if isinstance(filtered_body, dict):
+                display_result.update(filtered_body)
+            else:
+                display_result["result"] = filtered_body
+        else:
+            display_result = {"__title__": title, "result": filtered_body}
+        insert_json_tree(tree, top, display_result, open=True)
+
+    return shown, total
+
+def apply_filter(term, all_json_results, tree, field="Value", operator="contains"):
+    return apply_filters(
+        [{"term": term, "field": field, "operator": operator}],
+        all_json_results,
+        tree,
+        match_mode="ALL"
+    )
 
 def on_tree_right_click(
     event,
@@ -317,6 +421,64 @@ def export_tree_to_csv_from_tree(tree):
                     path = path[1:]
                 full_path = ".".join(path)
                 writer.writerow([hostname, ip, endpoint, full_path, value])
+
+    def _open_path(path: str):
+        try:
+            if sys.platform.startswith("win"):
+                os.startfile(path)  # type: ignore[attr-defined]
+            elif sys.platform.startswith("darwin"):
+                subprocess.Popen(["open", path])
+            else:
+                subprocess.Popen(["xdg-open", path])
+        except Exception as e:
+            messagebox.showerror("Open failed", f"Could not open:\n{path}\n\n{e}")
+
+    def _show_export_saved_dialog(parent, saved_path: str):
+        dlg = tk.Toplevel(parent)
+        dlg.title("Export Complete")
+        dlg.transient(parent)
+        dlg.resizable(False, False)
+        dlg.grab_set()
+
+        ttk.Label(
+            dlg,
+            text="Filtered CSV was saved successfully.",
+            font=("Segoe UI", 10, "bold"),
+        ).pack(anchor="w", padx=12, pady=(12, 6))
+        ttk.Label(
+            dlg,
+            text=saved_path,
+            justify="left",
+            wraplength=560
+        ).pack(anchor="w", padx=12, pady=(0, 10))
+
+        btns = ttk.Frame(dlg)
+        btns.pack(fill="x", padx=12, pady=(0, 12))
+
+        ttk.Button(
+            btns,
+            text="Open File",
+            command=lambda: (_open_path(saved_path), dlg.destroy())
+        ).pack(side="left")
+        ttk.Button(
+            btns,
+            text="Open Folder",
+            command=lambda: (_open_path(os.path.dirname(saved_path) or "."), dlg.destroy())
+        ).pack(side="left", padx=6)
+        ttk.Button(btns, text="OK", command=dlg.destroy).pack(side="right")
+
+        dlg.update_idletasks()
+        parent_x = parent.winfo_rootx()
+        parent_y = parent.winfo_rooty()
+        parent_w = parent.winfo_width()
+        parent_h = parent.winfo_height()
+        dlg_w = dlg.winfo_reqwidth()
+        dlg_h = dlg.winfo_reqheight()
+        x = parent_x + max(0, (parent_w - dlg_w) // 2)
+        y = parent_y + max(0, (parent_h - dlg_h) // 2)
+        dlg.geometry(f"+{x}+{y}")
+
+    _show_export_saved_dialog(tree.winfo_toplevel(), filepath)
 
 def show_help_guide(version):
     import os, sys, tkinter as tk
@@ -453,7 +615,7 @@ def show_help_guide(version):
         "   - Custom Request tab: set Endpoint, Version, Depth, Selector, and Attributes.\n"
         "4) Click 'Run API Requests' to fetch results.\n\n"
         "Use the Results tabs (JSON Viewer, Raw Response, Logs) to inspect output. "
-        "Right-click keys/values in the JSON tree to copy, filter, or re-run an API request with fields populated."
+        "Right-click keys/values in the JSON tree to copy, add to attributes, or re-run an API request with fields populated."
     ).pack(anchor="w")
 
     ttk.Separator(quick).pack(fill="x", pady=10)
@@ -473,10 +635,16 @@ def show_help_guide(version):
 
     section_title(quick, "Results & Exports").pack(anchor="w", pady=(6, 6))
     body_label(quick,
-        "- JSON Viewer shows results as a tree you can filter.\n"
+        "- JSON Viewer shows results as a tree with live filters.\n"
+        "- Filters support multiple rows using + / -.\n"
+        "- Filter Field supports Key or Value.\n"
+        "- Operators: contains, equals, not contains, not equals.\n"
+        "- With 2+ filters, choose Select ALL matches or Select ANY match.\n"
+        "- Match status shows switch-level counts (Matched switches / Showing switches).\n"
+        "- Use Clear Filters to reset all filter rows.\n"
+        "- Export Filtered to CSV exports what is currently shown in JSON Viewer.\n"
         "- Raw Response shows full JSON output with search.\n"
-        "- Logs shows activity and errors.\n"
-        "- Export filtered results to CSV from the JSON Viewer."
+        "- Logs shows activity and errors."
     ).pack(anchor="w")
 
     # --- CLI tab ---

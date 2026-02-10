@@ -2,11 +2,17 @@
 
 A lightweight Aruba CX multi-switch explorer that runs REST API requests across many devices at once, with a clean GUI, headless CLI mode, and CSV export.
 
+## Screenshot
+![MultiSwitchCXplorer screenshot](docs/images/screenshot.jpg)
+
 ## Features
 - Saved Requests and Custom Requests tabs
 - Parallel requests with concurrency control
 - JSON tree viewer, raw response, and logs
-- CSV export (filtered or full)
+- JSON Viewer multi-filter rows (`+` / `-`) with `ALL`/`ANY` matching
+- Key/Value filter fields with operators (`contains`, `equals`, `not contains`, `not equals`)
+- Live filtering with switch-level match counts
+- CSV export (filtered or full) with post-export actions (`Open File`, `Open Folder`, `OK`)
 - Headless mode for automation
 - Windows-focused, works cross-platform with Python
 
@@ -42,6 +48,8 @@ The EXE will be in `dist\MultiSwitchCXplorer.exe`.
 2. Enter credentials
 3. Choose Saved Request or Custom Request
 4. Click **Run API Requests**
+5. In **JSON Viewer**, optionally add one or more filters and choose **Select ALL matches** or **Select ANY match** (when multiple filters are present)
+6. Use **Clear Filters** to reset filters and **Export Filtered to CSV** to export currently displayed results
 
 ## Usage (CLI)
 

@@ -1,5 +1,16 @@
 ﻿# Release Notes
 
+## 2026.02.10
+- JSON Viewer filtering upgraded to multi-row filters with `+` / `-`
+- Filter matching modes added: `Select ALL matches` and `Select ANY match` (shown when 2+ filters are active)
+- Filter fields constrained to `Value` and `Key` with operators: `contains`, `equals`, `not contains`, `not equals`
+- Fixed filter behavior to scope matching correctly by selected field (`Key` vs `Value`)
+- Fixed boolean filtering so `false` values match correctly
+- Filter status updated to explicit switch counts (`Matched switches` / `Showing switches`)
+- Filter bar layout refined: fixed-width filter controls, compact +/- buttons, less cluttered action placement
+- Added post-export confirmation dialog with `Open File`, `Open Folder`, and `OK`
+- Help content updated to document new filter workflow and export behavior
+
 ## 2026.02.06
 - UI refresh with ttkbootstrap dark theme
 - Header title with Aruba-style accent and Help button
